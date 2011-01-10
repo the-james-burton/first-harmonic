@@ -1,0 +1,54 @@
+<html>
+<head>
+    <title>stock-analysis ratios</title>
+    <script src="js/sorttable.js"></script>
+</head>
+<style>
+body {
+	font: normal 80% verdana, arial, helvetica;
+	color: #000000;
+}
+
+table {
+	font: normal 80%;
+	border: 1px solid;
+	width: 100%;
+	border-collapse: collapse;
+}
+
+td {
+	margin: 1px;
+	border: 1px solid;
+}
+
+th {
+	margin: 2px;
+	border: 1px solid;
+}
+
+</style>
+<body>
+<table class="sortable">
+	<tr>
+	   <th>EPIC</th>
+#foreach ( $ratio in $ratios )
+        <th>$ratio</th>
+#end
+	</tr>
+
+#foreach ( $epic in $epics )
+    <tr>
+        <td>$epic.epic</td>
+    #foreach ( $ratio in $ratios )
+        #if ( $epic.ratios.get($ratio.toString() ) )
+            <td bgcolor="#$ratio.statistics.getRatingColor($epic.ratios.get($ratio.toString()))">$epic.ratios.get($ratio.toString())</td>
+        #else
+            <td></td>
+        #end
+    #end
+    </tr>
+#end
+
+</table>
+</body>
+</html>
