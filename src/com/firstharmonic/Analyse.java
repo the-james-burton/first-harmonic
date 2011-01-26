@@ -37,6 +37,8 @@ import org.apache.velocity.Template;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.Velocity;
 import org.apache.velocity.app.VelocityEngine;
+import org.w3c.tidy.Tidy;
+
 import com.firstharmonic.data.Ratio;
 import com.firstharmonic.stocks.Company;
 import com.firstharmonic.stocks.EPIC;
@@ -53,7 +55,6 @@ import com.firstharmonic.utils.comparator.CompanyMarketCapComparator;
 import com.firstharmonic.utils.comparator.CompanyRankingComparator;
 import com.firstharmonic.utils.comparator.CompanySectorComparator;
 import com.firstharmonic.utils.comparator.CompanySubSectorComparator;
-import org.w3c.tidy.Tidy;
 
 /**
  * http://www.londonstockexchange.com/statistics/companies-and-issuers/companies-and-issuers.htm http://www.reuters.com/finance/stocks/ratios
@@ -61,56 +62,71 @@ import org.w3c.tidy.Tidy;
  * @author the.james.burton
  */
 public class Analyse {
-    private static Logger                   logger             = Logger.getLogger(Analyse.class.getName());
-    private static final String             outputPath         = "c:/dev/first-harmonic/results/";
-    private static final String             proxy              = "";
-    private static final String             port               = "";
-    private static final String             companyURL         = "http://www.londonstockexchange.com/statistics/companies-and-issuers/list-of-all-companies.xls";
-    private static final String             securityURL        = "http://www.londonstockexchange.com/statistics/companies-and-issuers/list-of-all-uk-companies-ex-debt.xls";
-    private static final String             lseDir             = outputPath + "lse";
-    private static final String             companyXLS         = lseDir + "/companies.xls";
-    private static final String             securityXLS        = lseDir + "/securities.xls";
-    private static final String             companyFile        = lseDir + "/companies.txt";
-    private static final String             securityFile       = lseDir + "/securities.txt";
-    private static final String             companyFileMarker  = "List Date";
-    private static final String             securityFileMarker = "List Date";
-    private static final String             ratiosDir          = outputPath + "/ratios";
-    private static final String             reportsPath        = outputPath + "/reports";
-    private static final String             templatePath       = "c:/dev/first-harmonic/templates";
-    private static final String             ratioLink          = "http://www.reuters.com/finance/stocks/ratios?symbol=";
-    private static final String             ratioChartLink     = "http://www.reuters.com/charts/cr/?display=mountain&width=320&height=240&frequency=1week&duration=1year&symbol=";
-    private static Queue<String>            rics               = new ConcurrentLinkedQueue<String>();
-    private static BlockingQueue<HTML>      downloads          = new LinkedBlockingQueue<HTML>();
-    private static Map<String, Company>     companies          = new ConcurrentHashMap<String, Company>();
-    private static Map<String, Security>    securities         = new ConcurrentHashMap<String, Security>();
-    private static Map<String, String>      epicName           = new ConcurrentHashMap<String, String>();
-    private static Map<String, EPIC>        epics              = new ConcurrentHashMap<String, EPIC>();
-    private static SortedMap<String, Group> sectors            = new TreeMap<String, Group>();
-    private static SortedMap<String, Group> subSectors         = new TreeMap<String, Group>();
-    private static VelocityEngine           ve;
-    private static DateFormat               dateFormat         = new SimpleDateFormat("dd/MM/yyyy");
+    private static Logger                     logger             = Logger.getLogger(Analyse.class.getName());
+    private static final String               USAGE              = "usage: java com.firstharmonic.Analyse -DbasePath=<basePath> -DoutputPath=<outputPath>\nbasePath: where the project is installed\noutputPath: where you want the results to go\n";
+    private String                            basePath;
+    private String                            outputPath;
+    private String                            templatePath;
+    private String                            resultsPath;
+    private String                            ratiosDir;
+    private String                            reportsPath;
+    private String                            lseDir;
+    private final String                      companyURL         = "http://www.londonstockexchange.com/statistics/companies-and-issuers/list-of-all-companies.xls";
+    private final String                      securityURL        = "http://www.londonstockexchange.com/statistics/companies-and-issuers/list-of-all-uk-companies-ex-debt.xls";
+    private final String                      companyFileMarker  = "List Date";
+    private final String                      securityFileMarker = "List Date";
+    private String                            companyXLS;
+    private String                            securityXLS;
+    private String                            companyFile;
+    private String                            securityFile;
+    private final String                      ratioLink          = "http://www.reuters.com/finance/stocks/ratios?symbol=";
+    private final String                      ratioChartLink     = "http://www.reuters.com/charts/cr/?display=mountain&width=320&height=240&frequency=1week&duration=1year&symbol=";
+    private final static Queue<String>        rics               = new ConcurrentLinkedQueue<String>();
+    private final static BlockingQueue<HTML>  downloads          = new LinkedBlockingQueue<HTML>();
+    private final static Map<String, Company> companies          = new ConcurrentHashMap<String, Company>();
+    private final Map<String, Security>       securities         = new ConcurrentHashMap<String, Security>();
+    private final static Map<String, String>  epicName           = new ConcurrentHashMap<String, String>();
+    private static final Map<String, EPIC>    epics              = new ConcurrentHashMap<String, EPIC>();
+    private final SortedMap<String, Group>    sectors            = new TreeMap<String, Group>();
+    private final SortedMap<String, Group>    subSectors         = new TreeMap<String, Group>();
+    private VelocityEngine                    ve;
+    private final static DateFormat           dateFormat         = new SimpleDateFormat("dd/MM/yyyy");
 
     public static void main(String args[]) throws Exception {
-        System.setProperty("http.proxyHost", proxy);
-        System.setProperty("http.proxyPort", port);
-        new File(lseDir).mkdirs();
-        new File(ratiosDir).mkdirs();
-        new File(reportsPath).mkdirs();
-        downloadXLS();
-        createRatioHeaders();
-        importCompanies(companyFile);
-        importSecurities(securityFile);
-        createGroup(sectors, new CompanySectorComparator(), new SectorInspector());
-        createGroup(subSectors, new CompanySubSectorComparator(), new SubSectorInspector());
-        importRatios(ratiosDir);
-        computeStatistics();
-        sortCompaniesByGroup(sectors, new CompanyMarketCapComparator());
-        sortCompaniesByGroup(sectors, new CompanyRankingComparator());
-        runReports();
-        // printDebug();
+        Analyse me = new Analyse();
+        me.basePath = System.getProperty("basePath", null);
+        me.outputPath = System.getProperty("outputPath", null);
+        if ((me.basePath == null) || (me.outputPath == null)) {
+            System.err.println(USAGE);
+            System.exit(-1);
+        }
+        me.templatePath = me.basePath + "/templates";
+        me.resultsPath = me.outputPath + "/results";
+        me.ratiosDir = me.resultsPath + "/ratios";
+        me.reportsPath = me.resultsPath + "/reports";
+        me.lseDir = me.resultsPath + "/lse";
+        me.companyXLS = me.lseDir + "/companies.xls";
+        me.securityXLS = me.lseDir + "/securities.xls";
+        me.companyFile = me.lseDir + "/companies.txt";
+        me.securityFile = me.lseDir + "/securities.txt";
+        new File(me.lseDir).mkdirs();
+        new File(me.ratiosDir).mkdirs();
+        new File(me.reportsPath).mkdirs();
+        me.downloadXLS();
+        me.createRatioHeaders();
+        me.importCompanies(me.companyFile);
+        me.importSecurities(me.securityFile);
+        me.createGroup(me.sectors, new CompanySectorComparator(), new SectorInspector());
+        me.createGroup(me.subSectors, new CompanySubSectorComparator(), new SubSectorInspector());
+        me.importRatios(me.ratiosDir);
+        me.computeStatistics();
+        me.sortCompaniesByGroup(me.sectors, new CompanyMarketCapComparator());
+        me.sortCompaniesByGroup(me.sectors, new CompanyRankingComparator());
+        me.runReports();
+        // me.printDebug();
     }
 
-    private static void downloadXLS() throws Exception {
+    private void downloadXLS() throws Exception {
         logger.info("importing XLS");
         Downloader.downloadFile(companyURL, companyXLS);
         Downloader.downloadFile(securityURL, securityXLS);
@@ -118,7 +134,7 @@ public class Analyse {
         parseCompanies(securityXLS, securityFile, securityFileMarker);
     }
 
-    private static void parseCompanies(String input, String output, String marker) throws Exception {
+    private void parseCompanies(String input, String output, String marker) throws Exception {
         InputStream xls = new FileInputStream(input);
         Workbook wb = WorkbookFactory.create(xls);
         Sheet sheet = wb.getSheetAt(0);
@@ -164,16 +180,16 @@ public class Analyse {
         FileUtils.save(sb.toString(), new File(output));
     }
 
-    private static boolean isRowStart(Row row, String marker) {
+    private boolean isRowStart(Row row, String marker) {
         boolean result = false;
         Cell cell = row.getCell(0);
-        if (cell != null && cell.getCellType() == Cell.CELL_TYPE_STRING && marker.equals(cell.getStringCellValue())) {
+        if ((cell != null) && (cell.getCellType() == Cell.CELL_TYPE_STRING) && marker.equals(cell.getStringCellValue())) {
             result = true;
         }
         return result;
     }
 
-    private static void importCompanies(String filename) {
+    private void importCompanies(String filename) {
         logger.info("importing companies list");
         try {
             BufferedReader reader = new BufferedReader(new FileReader(filename));
@@ -194,7 +210,7 @@ public class Analyse {
         logger.info("number of companies: " + String.valueOf(companies.size()));
     }
 
-    private static void importSecurities(String filename) {
+    private void importSecurities(String filename) {
         logger.info("importing securities list");
         try {
             BufferedReader reader = new BufferedReader(new FileReader(filename));
@@ -218,7 +234,7 @@ public class Analyse {
         logger.info("number of securities: " + String.valueOf(securities.size()));
     }
 
-    private static void createRatioHeaders() throws Exception {
+    private void createRatioHeaders() throws Exception {
         logger.info("creating rotated ratio title headers");
         File images = new File(reportsPath, "images");
         FileUtils.deleteContents(images);
@@ -228,7 +244,7 @@ public class Analyse {
         }
     }
 
-    private static void createGroup(SortedMap<String, Group> group, Comparator<Company> comparator, Inspector inspector) {
+    private void createGroup(SortedMap<String, Group> group, Comparator<Company> comparator, Inspector inspector) {
         logger.info("creating group: " + comparator.getClass().getName() + ", " + inspector.getClass().getName());
         List<Company> sortedCompanies = new ArrayList<Company>(companies.values());
         Collections.sort(sortedCompanies, comparator);
@@ -274,7 +290,7 @@ public class Analyse {
         companies.get(epicName.get(ric)).setEpic(epic);
     }
 
-    private static void importRatios(String dir) {
+    private void importRatios(String dir) {
         logger.info("importing ratio files");
         for (String key : securities.keySet()) {
             rics.add(key);
@@ -297,7 +313,7 @@ public class Analyse {
         }
     }
 
-    private static void computeStatistics() {
+    private void computeStatistics() {
         logger.info("computing statistics");
         for (Ratio ratio : Ratio.values()) {
             for (EPIC epic : epics.values()) {
@@ -311,7 +327,7 @@ public class Analyse {
         populateGroupStatistics(subSectors);
     }
 
-    private static void populateGroupStatistics(SortedMap<String, Group> group) {
+    private void populateGroupStatistics(SortedMap<String, Group> group) {
         for (Group grouping : group.values()) {
             for (Company company : grouping.getCompanies()) {
                 for (Ratio ratio : Ratio.values()) {
@@ -327,14 +343,14 @@ public class Analyse {
         }
     }
 
-    private static void sortCompaniesByGroup(SortedMap<String, Group> group, Comparator comparator) {
+    private void sortCompaniesByGroup(SortedMap<String, Group> group, Comparator comparator) {
         for (Group grouping : group.values()) {
             grouping.setCompanyRankings();
             grouping.sortCompanies(comparator);
         }
     }
 
-    private static void runReports() throws Exception {
+    private void runReports() throws Exception {
         ve = new VelocityEngine();
         // ve.setProperty(Velocity.RUNTIME_LOG_LOGSYSTEM, this);
         ve.setProperty(Velocity.FILE_RESOURCE_LOADER_PATH, templatePath);
@@ -353,7 +369,7 @@ public class Analyse {
         velocityReport("sector.tmpl", "sector.html", context);
     }
 
-    private static void velocityReport(String transform, String filename, VelocityContext context) throws Exception {
+    private void velocityReport(String transform, String filename, VelocityContext context) throws Exception {
         // --- VELOCITY SETUP ---
         Template template = null;
         template = ve.getTemplate(transform);
@@ -369,7 +385,7 @@ public class Analyse {
         // FileUtils.save(sw.toString(), new File(outputPath, filename));
     }
 
-    private static void printDebug() {
+    private void printDebug() {
         // System.out.println();
         // System.out.println("-----------");
         // System.out.println("---TOTAL---");
