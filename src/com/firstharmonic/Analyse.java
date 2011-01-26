@@ -15,6 +15,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Queue;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -62,8 +63,8 @@ import com.firstharmonic.utils.comparator.CompanySubSectorComparator;
  * @author the.james.burton
  */
 public class Analyse {
-    private static Logger                     logger             = Logger.getLogger(Analyse.class.getName());
-    private static final String               USAGE              = "usage: java com.firstharmonic.Analyse -DbasePath=<basePath> -DoutputPath=<outputPath>\nbasePath: where the project is installed\noutputPath: where you want the results to go\n";
+    private static Logger                     logger     = Logger.getLogger(Analyse.class.getName());
+    private static final String               USAGE      = "usage: java com.firstharmonic.Analyse -DbasePath=<basePath> -DoutputPath=<outputPath>\nbasePath: where the project is installed\noutputPath: where you want the results to go\n";
     private String                            basePath;
     private String                            outputPath;
     private String                            templatePath;
@@ -71,35 +72,37 @@ public class Analyse {
     private String                            ratiosDir;
     private String                            reportsPath;
     private String                            lseDir;
-    private final String                      companyURL         = "http://www.londonstockexchange.com/statistics/companies-and-issuers/list-of-all-companies.xls";
-    private final String                      securityURL        = "http://www.londonstockexchange.com/statistics/companies-and-issuers/list-of-all-uk-companies-ex-debt.xls";
-    private final String                      companyFileMarker  = "List Date";
-    private final String                      securityFileMarker = "List Date";
+    private String                            companyURL;
+    private String                            securityURL;
+    private String                            companyFileMarker;
+    private String                            securityFileMarker;
     private String                            companyXLS;
     private String                            securityXLS;
     private String                            companyFile;
     private String                            securityFile;
-    private final String                      ratioLink          = "http://www.reuters.com/finance/stocks/ratios?symbol=";
-    private final String                      ratioChartLink     = "http://www.reuters.com/charts/cr/?display=mountain&width=320&height=240&frequency=1week&duration=1year&symbol=";
-    private final static Queue<String>        rics               = new ConcurrentLinkedQueue<String>();
-    private final static BlockingQueue<HTML>  downloads          = new LinkedBlockingQueue<HTML>();
-    private final static Map<String, Company> companies          = new ConcurrentHashMap<String, Company>();
-    private final Map<String, Security>       securities         = new ConcurrentHashMap<String, Security>();
-    private final static Map<String, String>  epicName           = new ConcurrentHashMap<String, String>();
-    private static final Map<String, EPIC>    epics              = new ConcurrentHashMap<String, EPIC>();
-    private final SortedMap<String, Group>    sectors            = new TreeMap<String, Group>();
-    private final SortedMap<String, Group>    subSectors         = new TreeMap<String, Group>();
+    private String                            ratioLink;
+    private String                            ratioChartLink;
+    private final static Queue<String>        rics       = new ConcurrentLinkedQueue<String>();
+    private final static BlockingQueue<HTML>  downloads  = new LinkedBlockingQueue<HTML>();
+    private final static Map<String, Company> companies  = new ConcurrentHashMap<String, Company>();
+    private final Map<String, Security>       securities = new ConcurrentHashMap<String, Security>();
+    private final static Map<String, String>  epicName   = new ConcurrentHashMap<String, String>();
+    private static final Map<String, EPIC>    epics      = new ConcurrentHashMap<String, EPIC>();
+    private final SortedMap<String, Group>    sectors    = new TreeMap<String, Group>();
+    private final SortedMap<String, Group>    subSectors = new TreeMap<String, Group>();
     private VelocityEngine                    ve;
-    private final static DateFormat           dateFormat         = new SimpleDateFormat("dd/MM/yyyy");
+    private final static DateFormat           dateFormat = new SimpleDateFormat("dd/MM/yyyy");
 
     public static void main(String args[]) throws Exception {
         Analyse me = new Analyse();
+        // take the parameters in...
         me.basePath = System.getProperty("basePath", null);
         me.outputPath = System.getProperty("outputPath", null);
         if ((me.basePath == null) || (me.outputPath == null)) {
             System.err.println(USAGE);
             System.exit(-1);
         }
+        // setup the constants derived from the above paramters...
         me.templatePath = me.basePath + "/templates";
         me.resultsPath = me.outputPath + "/results";
         me.ratiosDir = me.resultsPath + "/ratios";
@@ -109,9 +112,25 @@ public class Analyse {
         me.securityXLS = me.lseDir + "/securities.xls";
         me.companyFile = me.lseDir + "/companies.txt";
         me.securityFile = me.lseDir + "/securities.txt";
+        // take the properties file in...
+        Properties properties = new Properties();
+        try {
+            properties.load(new FileInputStream(new File(me.basePath, "firstharmonic.properties")));
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        // load the properties we need into constants...
+        me.companyURL = properties.getProperty("companyURL");
+        me.securityURL = properties.getProperty("securityURL");
+        me.companyFileMarker = properties.getProperty("companyFileMarker");
+        me.securityFileMarker = properties.getProperty("securityFileMarker");
+        me.ratioLink = properties.getProperty("ratioLink");
+        me.ratioChartLink = properties.getProperty("ratioChartLink");
+        // create any require directories...
         new File(me.lseDir).mkdirs();
         new File(me.ratiosDir).mkdirs();
         new File(me.reportsPath).mkdirs();
+        // begin main processing...
         me.downloadXLS();
         me.createRatioHeaders();
         me.importCompanies(me.companyFile);
