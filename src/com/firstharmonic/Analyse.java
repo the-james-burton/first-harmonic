@@ -91,7 +91,7 @@ public class Analyse {
     private final SortedMap<String, Group>    sectors    = new TreeMap<String, Group>();
     private final SortedMap<String, Group>    subSectors = new TreeMap<String, Group>();
     private VelocityEngine                    ve;
-    private final static DateFormat           dateFormat = new SimpleDateFormat("dd/MM/yyyy");
+    private static DateFormat                 dateFormat;
 
     public static void main(String args[]) throws Exception {
         Analyse me = new Analyse();
@@ -124,6 +124,7 @@ public class Analyse {
         me.securityURL = properties.getProperty("securityURL");
         me.companyFileMarker = properties.getProperty("companyFileMarker");
         me.securityFileMarker = properties.getProperty("securityFileMarker");
+        dateFormat = new SimpleDateFormat(properties.getProperty("dateFormat"));
         me.ratioLink = properties.getProperty("ratioLink");
         me.ratioChartLink = properties.getProperty("ratioChartLink");
         // create any require directories...
