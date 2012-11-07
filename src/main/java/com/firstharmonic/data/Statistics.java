@@ -1,6 +1,6 @@
 package com.firstharmonic.data;
 
-import org.apache.commons.math.stat.descriptive.DescriptiveStatistics;
+import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 
 public class Statistics {
 

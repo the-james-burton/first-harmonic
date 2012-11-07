@@ -31,7 +31,13 @@ public class Company {
         String[] fields = line.split("\t");
 
         if (!"".equals(fields[0])) {
-            this.listDate = Analyse.getDateFormat().parse(fields[0]);
+            Date parsed = null;
+            try {
+                parsed = Analyse.getDateFormat().parse(fields[0]);
+            } catch (Exception e) {
+                // ignore unparseable dates
+            }
+            this.listDate = parsed;
         } else {
             this.listDate = null;
         }
