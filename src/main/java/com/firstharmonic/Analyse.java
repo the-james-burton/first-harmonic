@@ -65,8 +65,10 @@ import com.firstharmonic.utils.comparator.CompanySubSectorComparator;
 public class Analyse {
     private static Logger                     logger     = Logger.getLogger(Analyse.class.getName());
     private static final String               USAGE      = "usage: java com.firstharmonic.Analyse -DbasePath=<basePath> -DoutputPath=<outputPath>\nbasePath: where the project is installed\noutputPath: where you want the results to go\n";
+    // supplied
     private String                            basePath;
     private String                            outputPath;
+    // calculated
     private String                            templatePath;
     private String                            resultsPath;
     private String                            ratiosDir;
@@ -93,56 +95,49 @@ public class Analyse {
     private VelocityEngine                    ve;
     private static DateFormat                 dateFormat;
 
-    public static void main(String args[]) throws Exception {
-        Analyse me = new Analyse();
-        // take the parameters in...
-        me.basePath = System.getProperty("basePath", null);
-        me.outputPath = System.getProperty("outputPath", null);
-        if ((me.basePath == null) || (me.outputPath == null)) {
-            System.err.println(USAGE);
-            System.exit(-1);
-        }
+    public void init() throws Exception {
+            
         // setup the constants derived from the above paramters...
-        me.templatePath = me.basePath + "/templates";
-        me.resultsPath = me.outputPath + "/results";
-        me.ratiosDir = me.resultsPath + "/ratios";
-        me.reportsPath = me.resultsPath + "/reports";
-        me.lseDir = me.resultsPath + "/lse";
-        me.companyXLS = me.lseDir + "/companies.xls";
-        me.securityXLS = me.lseDir + "/securities.xls";
-        me.companyFile = me.lseDir + "/companies.txt";
-        me.securityFile = me.lseDir + "/securities.txt";
+        templatePath = basePath + "/templates";
+        resultsPath = outputPath + "/results";
+        ratiosDir = resultsPath + "/ratios";
+        reportsPath = resultsPath + "/reports";
+        lseDir = resultsPath + "/lse";
+        companyXLS = lseDir + "/companies.xls";
+        securityXLS = lseDir + "/securities.xls";
+        companyFile = lseDir + "/companies.txt";
+        securityFile = lseDir + "/securities.txt";
         // take the properties file in...
         Properties properties = new Properties();
         try {
-            properties.load(new FileInputStream(new File(me.basePath, "firstharmonic.properties")));
+            properties.load(this.getClass().getClassLoader().getResourceAsStream("firstharmonic.properties"));
         } catch (Exception e) {
             e.printStackTrace();
         }
         // load the properties we need into constants...
-        me.companyURL = properties.getProperty("companyURL");
-        me.securityURL = properties.getProperty("securityURL");
-        me.companyFileMarker = properties.getProperty("companyFileMarker");
-        me.securityFileMarker = properties.getProperty("securityFileMarker");
+        companyURL = properties.getProperty("companyURL");
+        securityURL = properties.getProperty("securityURL");
+        companyFileMarker = properties.getProperty("companyFileMarker");
+        securityFileMarker = properties.getProperty("securityFileMarker");
         dateFormat = new SimpleDateFormat(properties.getProperty("dateFormat"));
-        me.ratioLink = properties.getProperty("ratioLink");
-        me.ratioChartLink = properties.getProperty("ratioChartLink");
+        ratioLink = properties.getProperty("ratioLink");
+        ratioChartLink = properties.getProperty("ratioChartLink");
         // create any require directories...
-        new File(me.lseDir).mkdirs();
-        new File(me.ratiosDir).mkdirs();
-        new File(me.reportsPath).mkdirs();
+        new File(lseDir).mkdirs();
+        new File(ratiosDir).mkdirs();
+        new File(reportsPath).mkdirs();
         // begin main processing...
-        me.downloadXLS();
-        me.createRatioHeaders();
-        me.importCompanies(me.companyFile);
-        me.importSecurities(me.securityFile);
-        me.createGroup(me.sectors, new CompanySectorComparator(), new SectorInspector());
-        me.createGroup(me.subSectors, new CompanySubSectorComparator(), new SubSectorInspector());
-        me.importRatios(me.ratiosDir);
-        me.computeStatistics();
-        me.sortCompaniesByGroup(me.sectors, new CompanyMarketCapComparator());
-        me.sortCompaniesByGroup(me.sectors, new CompanyRankingComparator());
-        me.runReports();
+        downloadXLS();
+        createRatioHeaders();
+        importCompanies(companyFile);
+        importSecurities(securityFile);
+        createGroup(sectors, new CompanySectorComparator(), new SectorInspector());
+        createGroup(subSectors, new CompanySubSectorComparator(), new SubSectorInspector());
+        importRatios(ratiosDir);
+        computeStatistics();
+        sortCompaniesByGroup(sectors, new CompanyMarketCapComparator());
+        sortCompaniesByGroup(sectors, new CompanyRankingComparator());
+        runReports();
         // me.printDebug();
     }
 
@@ -150,14 +145,14 @@ public class Analyse {
         logger.info("importing XLS");
         Downloader.downloadFile(companyURL, companyXLS);
         Downloader.downloadFile(securityURL, securityXLS);
-        parseCompanies(companyXLS, companyFile, companyFileMarker);
-        parseCompanies(securityXLS, securityFile, securityFileMarker);
+        parseCompanies(companyXLS, companyFile, companyFileMarker, 0);
+        parseCompanies(securityXLS, securityFile, securityFileMarker, 1);
     }
 
-    private void parseCompanies(String input, String output, String marker) throws Exception {
+    private void parseCompanies(String input, String output, String marker, int sheetnum) throws Exception {
         InputStream xls = new FileInputStream(input);
         Workbook wb = WorkbookFactory.create(xls);
-        Sheet sheet = wb.getSheetAt(0);
+        Sheet sheet = wb.getSheetAt(sheetnum);
         StringBuilder sb = new StringBuilder();
         boolean started = false;
         char separator = '\t';
@@ -237,7 +232,7 @@ public class Analyse {
             String line;
             line = reader.readLine(); // ignore headers
             while ((line = reader.readLine()) != null) {
-                if (!"".equals(line)) {
+                if (!"".equals(line.trim())) {
                     Security security = new Security(line);
                     if (security.ordShares && security.stockName.startsWith("ORD") && companies.containsKey(security.name)) {
                         securities.put(security.EPIC, security);
@@ -470,4 +465,14 @@ public class Analyse {
     public static DateFormat getDateFormat() {
         return dateFormat;
     }
+    
+    public void setBasePath(String basePath) {
+        this.basePath = basePath;
+    }
+
+    public void setOutputPath(String outputPath) {
+        this.outputPath = outputPath;
+    }
+
+    
 }
