@@ -9,13 +9,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.logging.Logger;
 
+import org.apache.commons.io.FileUtils;
 import org.apache.velocity.Template;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.Velocity;
 import org.apache.velocity.app.VelocityEngine;
+
 import com.firstharmonic.stocks.Company;
 import com.firstharmonic.stocks.Security;
-import com.firstharmonic.utils.FileUtils;
 
 /**
  * http://www.londonstockexchange.com/statistics/companies-and-issuers/companies-and-issuers.htm http://www.reuters.com/finance/stocks/ratios
@@ -109,6 +110,6 @@ public class CreateDownloadLinks {
         template = ve.getTemplate(transform);
         StringWriter sw = new StringWriter();
         template.merge(context, sw);
-        FileUtils.save(sw.toString(), file);
+        FileUtils.writeStringToFile(file, sw.toString());
     }
 }

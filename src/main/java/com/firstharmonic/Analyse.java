@@ -2,11 +2,12 @@ package com.firstharmonic;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.InputStream;
+import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
@@ -28,6 +29,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
+import org.apache.commons.io.FileUtils;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.DateUtil;
 import org.apache.poi.ss.usermodel.Row;
@@ -36,7 +38,6 @@ import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.apache.velocity.Template;
 import org.apache.velocity.VelocityContext;
-import org.apache.velocity.app.Velocity;
 import org.apache.velocity.app.VelocityEngine;
 import org.w3c.tidy.Tidy;
 
@@ -49,7 +50,6 @@ import com.firstharmonic.stocks.Security;
 import com.firstharmonic.stocks.inspection.Inspector;
 import com.firstharmonic.stocks.inspection.SectorInspector;
 import com.firstharmonic.stocks.inspection.SubSectorInspector;
-import com.firstharmonic.utils.FileUtils;
 import com.firstharmonic.utils.FormatUtils;
 import com.firstharmonic.utils.ImageUtils;
 import com.firstharmonic.utils.comparator.CompanyMarketCapComparator;
@@ -192,7 +192,7 @@ public class Analyse {
                 sb.append("\n");
             }
         }
-        FileUtils.save(sb.toString(), new File(output));
+        FileUtils.writeStringToFile(new File(output), sb.toString());
     }
 
     private boolean isRowStart(Row row, String marker) {
@@ -252,7 +252,7 @@ public class Analyse {
     private void createRatioHeaders() throws Exception {
         logger.info("creating rotated ratio title headers");
         File images = new File(reportsPath, "images");
-        FileUtils.deleteContents(images);
+        FileUtils.cleanDirectory(images);
         images.mkdirs();
         for (Ratio ratio : Ratio.values()) {
             ImageUtils.rotate(ratio.getName(), new File(images, ratio.toString() + ".png"));
@@ -313,7 +313,8 @@ public class Analyse {
         int size = rics.size();
         ExecutorService downloaders = Executors.newFixedThreadPool(4);
         ExecutorService parsers = Executors.newFixedThreadPool(4);
-        for (int i = 0; i < size; i++) {
+        //for (int i = 0; i < size; i++) {
+        for (int i = 0; i < 100; i++) {
             downloaders.execute(new Downloader(ratioLink, ratiosDir));
             parsers.execute(new Parser());
         }
@@ -366,10 +367,11 @@ public class Analyse {
     }
 
     private void runReports() throws Exception {
+        Properties props = new Properties();
+        props.put("resource.loader", "class");
+        props.put("class.resource.loader.class", "org.apache.velocity.runtime.resource.loader.ClasspathResourceLoader");
         ve = new VelocityEngine();
-        // ve.setProperty(Velocity.RUNTIME_LOG_LOGSYSTEM, this);
-        ve.setProperty(Velocity.FILE_RESOURCE_LOADER_PATH, templatePath);
-        ve.init();
+        ve.init(props);
         VelocityContext context = new VelocityContext();
         context.put("format", new FormatUtils());
         context.put("epics", epics);
@@ -387,16 +389,21 @@ public class Analyse {
     private void velocityReport(String transform, String filename, VelocityContext context) throws Exception {
         // --- VELOCITY SETUP ---
         Template template = null;
-        template = ve.getTemplate(transform);
+        template = ve.getTemplate("templates/" + transform);
         StringWriter sw = new StringWriter();
         template.merge(context, sw);
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        //ByteArrayOutputStream out = new ByteArrayOutputStream();
+        FileWriter fw = new FileWriter(new File(reportsPath, filename));
         ByteArrayInputStream in = new ByteArrayInputStream(sw.getBuffer().toString().getBytes());
         Tidy tidy = new Tidy();
+        //tidy.setErrout(new PrintWriter(System.out, true));
+        tidy.setOnlyErrors(true);
         tidy.setXHTML(true);
+        tidy.setForceOutput(true);
         tidy.setIndentContent(false);
-        tidy.parse(in, out);
-        FileUtils.save(out.toString(), new File(reportsPath, filename));
+        tidy.parse(in, fw);
+        //FileUtils.writeStringToFile(new File(reportsPath, filename), out.toString());
+        FileUtils.writeStringToFile(new File(reportsPath, "raw-" + filename), sw.getBuffer().toString());
         // FileUtils.save(sw.toString(), new File(outputPath, filename));
     }
 
