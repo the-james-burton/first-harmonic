@@ -7,7 +7,6 @@ import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.InputStream;
-import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
@@ -23,6 +22,7 @@ import java.util.TreeMap;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -63,40 +63,46 @@ import com.firstharmonic.utils.comparator.CompanySubSectorComparator;
  * @author the.james.burton
  */
 public class Analyse {
-    private static Logger                     logger     = Logger.getLogger(Analyse.class.getName());
-    private static final String               USAGE      = "usage: java com.firstharmonic.Analyse -DbasePath=<basePath> -DoutputPath=<outputPath>\nbasePath: where the project is installed\noutputPath: where you want the results to go\n";
+    private static Logger                         logger             = Logger.getLogger(Analyse.class.getName());
+    private static final String                   USAGE              = "usage: java com.firstharmonic.Analyse -DbasePath=<basePath> -DoutputPath=<outputPath>\nbasePath: where the project is installed\noutputPath: where you want the results to go\n";
     // supplied
-    private String                            basePath;
-    private String                            outputPath;
+    private String                                basePath;
+    private String                                outputPath;
     // calculated
-    private String                            templatePath;
-    private String                            resultsPath;
-    private String                            ratiosDir;
-    private String                            reportsPath;
-    private String                            lseDir;
-    private String                            companyURL;
-    private String                            securityURL;
-    private String                            companyFileMarker;
-    private String                            securityFileMarker;
-    private String                            companyXLS;
-    private String                            securityXLS;
-    private String                            companyFile;
-    private String                            securityFile;
-    private String                            ratioLink;
-    private String                            ratioChartLink;
-    private final static Queue<String>        rics       = new ConcurrentLinkedQueue<String>();
-    private final static BlockingQueue<HTML>  downloads  = new LinkedBlockingQueue<HTML>();
-    private final static Map<String, Company> companies  = new ConcurrentHashMap<String, Company>();
-    private final Map<String, Security>       securities = new ConcurrentHashMap<String, Security>();
-    private final static Map<String, String>  epicName   = new ConcurrentHashMap<String, String>();
-    private static final Map<String, EPIC>    epics      = new ConcurrentHashMap<String, EPIC>();
-    private final SortedMap<String, Group>    sectors    = new TreeMap<String, Group>();
-    private final SortedMap<String, Group>    subSectors = new TreeMap<String, Group>();
-    private VelocityEngine                    ve;
-    private static DateFormat                 dateFormat;
+    private String                                templatePath;
+    private String                                resultsPath;
+    private String                                ratiosDir;
+    private String                                reportsPath;
+    private String                                lseDir;
+    private String                                companyURL;
+    private String                                securityURL;
+    private String                                companyFileMarker;
+    private String                                securityFileMarker;
+    private String                                companyXLS;
+    private String                                securityXLS;
+    private String                                companyFile;
+    private String                                securityFile;
+    private String                                ratioLink;
+    private String                                ratioChartLink;
+    private final static Queue<String>            rics               = new ConcurrentLinkedQueue<String>();
+    private final static BlockingQueue<HTML>      downloads          = new LinkedBlockingQueue<HTML>();
+    private final static Map<String, Company>     companies          = new ConcurrentHashMap<String, Company>();
+    private final Map<String, Security>           securities         = new ConcurrentHashMap<String, Security>();
+    private final static Map<String, String>      epicName           = new ConcurrentHashMap<String, String>();
+    private static final Map<String, EPIC>        epics              = new ConcurrentHashMap<String, EPIC>();
+    private final SortedMap<String, Group>        sectors            = new TreeMap<String, Group>();
+    private final SortedMap<String, Group>        subSectors         = new TreeMap<String, Group>();
+    private VelocityEngine                        ve;
+    private static DateFormat                     dateFormat;
+
+    private final ExecutorService                 downloaders        = Executors.newFixedThreadPool(4);
+    private final ExecutorService                 parsers            = Executors.newFixedThreadPool(4);
+
+    private final ExecutorCompletionService<HTML> downloadingService = new ExecutorCompletionService<HTML>(downloaders);
+    private final ExecutorCompletionService<EPIC> parsingService     = new ExecutorCompletionService<EPIC>(parsers);
 
     public void init() throws Exception {
-            
+
         // setup the constants derived from the above paramters...
         templatePath = basePath + "/templates";
         resultsPath = outputPath + "/results";
@@ -278,45 +284,58 @@ public class Analyse {
         }
     }
 
-    public static String getRic() {
-        return rics.poll();
-    }
+    /*
+     * public static String getRic() {
+     * return rics.poll();
+     * }
+     * 
+     * public static void putDownload(String ric, String download) {
+     * try {
+     * downloads.put(new HTML(ric, download));
+     * } catch (InterruptedException e) {
+     * Thread.currentThread().interrupt();
+     * }
+     * }
+     * 
+     * public static HTML getDownload() {
+     * HTML result = null;
+     * try {
+     * result = downloads.take();
+     * } catch (InterruptedException e) {
+     * Thread.currentThread().interrupt();
+     * }
+     * return result;
+     * }
+     */
 
-    public static void putDownload(String ric, String download) {
-        try {
-            downloads.put(new HTML(ric, download));
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-    }
-
-    public static HTML getDownload() {
-        HTML result = null;
-        try {
-            result = downloads.take();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-        return result;
-    }
-
-    public static void putParsed(String ric, EPIC epic) {
+    /*
+    public static void putParsed(EPIC epic) {
+        String ric = epic.getName();
         epics.put(ric, epic);
         companies.get(epicName.get(ric)).setEpic(epic);
     }
+    */
 
-    private void importRatios(String dir) {
+    private void importRatios(String dir) throws Exception {
         logger.info("importing ratio files");
         for (String key : securities.keySet()) {
             rics.add(key);
         }
         int size = rics.size();
-        ExecutorService downloaders = Executors.newFixedThreadPool(4);
-        ExecutorService parsers = Executors.newFixedThreadPool(4);
-        //for (int i = 0; i < size; i++) {
+        // ExecutorService downloaders = Executors.newFixedThreadPool(4);
+        // ExecutorService parsers = Executors.newFixedThreadPool(4);
+        // for (int i = 0; i < size; i++) {
         for (int i = 0; i < 100; i++) {
-            downloaders.execute(new Downloader(ratioLink, ratiosDir));
-            parsers.execute(new Parser());
+            downloadingService.submit(new Downloader(ratioLink, rics.poll(), ratiosDir));
+            parsingService.submit(new Parser(downloadingService.take()));
+            EPIC epic = parsingService.take().get();
+            //epics.put(epic);
+            //putParsed(epic);
+            String ric = epic.getName();
+            epics.put(ric, epic);
+            companies.get(epicName.get(ric)).setEpic(epic);
+            // downloaders.execute(new Downloader(ratioLink, ratiosDir));
+            // parsers.execute(new Parser());
         }
         downloaders.shutdown();
         parsers.shutdown();
@@ -392,17 +411,17 @@ public class Analyse {
         template = ve.getTemplate("templates/" + transform);
         StringWriter sw = new StringWriter();
         template.merge(context, sw);
-        //ByteArrayOutputStream out = new ByteArrayOutputStream();
+        // ByteArrayOutputStream out = new ByteArrayOutputStream();
         FileWriter fw = new FileWriter(new File(reportsPath, filename));
         ByteArrayInputStream in = new ByteArrayInputStream(sw.getBuffer().toString().getBytes());
         Tidy tidy = new Tidy();
-        //tidy.setErrout(new PrintWriter(System.out, true));
+        // tidy.setErrout(new PrintWriter(System.out, true));
         tidy.setOnlyErrors(true);
         tidy.setXHTML(true);
         tidy.setForceOutput(true);
         tidy.setIndentContent(false);
         tidy.parse(in, fw);
-        //FileUtils.writeStringToFile(new File(reportsPath, filename), out.toString());
+        // FileUtils.writeStringToFile(new File(reportsPath, filename), out.toString());
         FileUtils.writeStringToFile(new File(reportsPath, "raw-" + filename), sw.getBuffer().toString());
         // FileUtils.save(sw.toString(), new File(outputPath, filename));
     }
@@ -472,7 +491,7 @@ public class Analyse {
     public static DateFormat getDateFormat() {
         return dateFormat;
     }
-    
+
     public void setBasePath(String basePath) {
         this.basePath = basePath;
     }
@@ -481,5 +500,4 @@ public class Analyse {
         this.outputPath = outputPath;
     }
 
-    
 }

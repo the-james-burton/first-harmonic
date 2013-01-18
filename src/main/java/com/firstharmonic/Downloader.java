@@ -11,21 +11,26 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.concurrent.Callable;
 import java.util.logging.Logger;
 
-public class Downloader implements Runnable {
+import com.firstharmonic.stocks.HTML;
+
+public class Downloader implements Callable<HTML> {
     private static Logger logger = Logger.getLogger(Downloader.class.getName());
+    private String ric;
     private String        url;
     private String        output;
 
-    public Downloader(String url, String output) {
+    public Downloader(String url, String ric, String output) {
         this.url = url;
+        this.ric = ric;
         this.output = output;
     }
 
     @Override
-    public void run() {
-        String ric = Analyse.getRic();
+    public HTML call() throws Exception {
+        //String ric = Analyse.getRic();
         String html;
         File file = new File(output, ric + ".html");
         if (file.exists()) {
@@ -36,7 +41,8 @@ public class Downloader implements Runnable {
             html = download(url + ric + ".L");
             save(html, file);
         }
-        Analyse.putDownload(ric, html);
+        return new HTML(ric, html);
+        //Analyse.putDownload(ric, html);
     }
 
     public static void downloadFile(String url, String filename) throws Exception {
