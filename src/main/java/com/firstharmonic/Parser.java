@@ -1,19 +1,27 @@
 package com.firstharmonic;
 
+import java.util.concurrent.Callable;
+import java.util.concurrent.Future;
 import java.util.logging.Logger;
 
 import com.firstharmonic.stocks.EPIC;
 import com.firstharmonic.stocks.HTML;
 
-public class Parser implements Runnable {
+public class Parser implements Callable<EPIC> {
     private static Logger logger = Logger.getLogger(Parser.class.getName());
 
+    private Future<HTML> future;
+    
+    public Parser(Future<HTML> future) {
+        this.future = future;
+    }
+    
     @Override
-    public void run() {
-        HTML html = Analyse.getDownload();
+    public EPIC call() throws Exception {
+        //HTML html = Analyse.getDownload();
+        HTML html = future.get();
         String ric = html.getRic();
         logger.info(ric + ":parsing");
-        EPIC epic = new EPIC(ric, html.getHtml());
-        Analyse.putParsed(ric, epic);
-    }
+        return new EPIC(ric, html.getHtml());
+        }
 }
