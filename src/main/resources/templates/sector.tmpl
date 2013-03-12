@@ -1,0 +1,164 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en" dir="ltr">
+<head>
+    <title>stock-analysis ratios</title>
+    <style>
+        body {
+            font: normal 80% arial narrow, arial, helvetica, verdana;
+            color: #000000;
+        }
+        
+        table {
+            font: normal 80%;
+            border: 1px solid;
+            width: 100%;
+            border-collapse: collapse;
+        }
+               
+        td.h1 {
+            font-family: verdana, arial, helvetica;
+            background-color: #dddddd;
+            font-size: 14pt;
+            text-align: left;
+            margin: 2px;
+            border: 1px solid;
+        }
+
+        td.h2 {
+            text-align: left;
+            margin: 2px;
+            border: 1px solid;
+        }
+        
+        td {
+            text-align: right;
+            margin: 1px;
+            border: 1px solid;
+        }
+        
+        th {
+            vertical-align: bottom;
+            margin: 2px;
+            border: 1px solid;
+        }
+        
+        a {
+            font-weight:bold;
+            position:relative;
+            color:#000000;
+            text-decoration:none;
+        }
+
+        a.info{
+            position:relative;
+            color:#000000;
+            text-decoration:none;
+        }
+            
+        a.info:hover {
+            //background-color:#ffff66;
+        }
+        
+        a.info span{
+            display: none;
+        }
+        
+        a.info:hover span {
+            display:block;
+            position:absolute;
+            left: 100px;
+            z-index:1;
+        }
+        
+        .images {
+            vertical-align:bottom;
+        }
+        
+        
+    </style>
+
+    <script type="text/javascript">
+    <!--
+    function chart(url, stock) {
+        chartPopup = window.open( "", stock, "height=240, width=320, toolbar=no, menubar=no, scrollbars=no, resizable=no, location=yes, directories=no, status=no" );
+        chartPopup.document.write( "<html><head><title>" + stock + "</title></head><body><img src='" + url + "'/></body></html" );
+        chartPopup.document.close();
+    }    //-->
+    </script>
+    
+    
+</head>
+<body>
+<table>
+	<tr>
+	   #set ( $columns = 6 )
+       <th>Name</th>
+       <th>Ranking</th>
+       <th>EPIC</th>
+       <th>Index</th>
+       <th>Ctry</th>
+       ## <th>Region</th>
+       <th>Market Cap £m</th>
+#foreach ( $ratio in $ratios )
+        <th><img alt="$ratio.name" src="images/${ratio.toString()}.png"/><br/>#if( $ratio.lowGood )&nbsp;v#else&nbsp;^#end</th>
+#end
+	</tr>
+    #set($colspan = $numberOfRatios + $columns )
+    #foreach( $sector in $sectors.values() )
+      #if ( !($sector.name == "Equity Investment Instruments") )
+        <tr><td class="h1" colspan="$colspan"><b>$sector.name</b></td></tr>
+        #foreach ( $company in $sector.companies )
+            #if ( $company.epic && $company.epic.ratios.size() > 0 )
+                <tr>
+                    <td class="h2" 
+                    #if ( $company.ranking )
+                        bgcolor="#$sector.ranking.getRatingColor($company.ranking)"
+                    #end
+                    >
+                        <a href="${ratioLink}${company.epic.name}.L">$format.nbsp($company.name)</a>
+                    </td>
+                    #if ( $company.ranking )
+                        <td class="h2">$company.ranking</td>
+                    #else
+                        <td></td>
+                    #end
+                    ## <td class="h2"><a class="info" href="${ratioLink}${company.epic.name}.L">$company.epic.name<span><img src="${ratioChartLink}/${company.epic.name}-chart.png" /></span></a></td>
+                    <td class="h2"><div onClick="javascript:chart('${ratioChartLink}${company.epic.name}.L', '${company.epic.name}');">$company.epic.name</div></td>
+                    <td class="h2">$format.nbsp($company.market)#if ( $company.techMARK )&nbsp;(T)#end</td>
+                    <td class="h2">$format.nbsp($company.country)</td>
+                    ## <td class="h2">$format.nbsp($company.region)</td>
+                    <td>$format.format($company.marketCap)</td>
+                    #foreach ( $ratio in $ratios )
+                        #set ( $value = false )
+                        #set ( $value = $company.epic.ratios.get($ratio.toString()) )
+                        #if ( $value )
+                            #set ( $color = "#ffffff" )
+                            #set ( $color = $sector.statistics.get($ratio).getRatingColor($value) )
+                            <td bgcolor="#$color">$format.format($value)</td>
+                        #else
+                            <td></td>
+                        #end
+                    #end
+                </tr>
+            #end
+        #end
+        <tr>
+            <td colspan="$columns" class="h2"><em>totals:</em></td>
+            #foreach ( $ratio in $ratios )
+                #set ( $value = false )
+                #set ( $value = $sector.statistics.get($ratio).median )
+                #if ( $value != "NaN")
+                    #set ( $color = "#ffffff" )
+                    #set ( $color = $ratio.statistics.getRatingColor($value) )
+                    <td bgcolor="#$color">$format.format($value)</td>
+                #else
+                    <td></td>
+                #end
+            #end
+        </tr>
+      #end
+    #end
+
+</table>
+</body>
+</html>
